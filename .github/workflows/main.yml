@@ -1,0 +1,55 @@
+name: VPS with Tailscale
+
+on:
+  workflow_dispatch:
+
+jobs:
+  vps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    
+    steps:
+    - name: Install SSH Server
+      run: |
+        sudo apt update -y
+        sudo apt install -y openssh-server
+        sudo systemctl enable ssh
+        sudo systemctl start ssh
+        
+    - name: Set root password
+      run: |
+        echo "root:ubuntu123" | sudo chpasswd
+        sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+        sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
+        sudo service ssh restart
+        
+    - name: Install Tailscale
+      run: |
+        curl -fsSL https://tailscale.com/install.sh | sh
+        echo "Tailscale installed successfully"
+        
+    - name: Show connection info
+      run: |
+        IP=$(curl -s ifconfig.me)
+        echo "================================="
+        echo "✅ VPS READY!"
+        echo "================================="
+        echo "IP Address: $IP"
+        echo "Username: root"
+        echo "Password: ubuntu123"
+        echo "SSH Command: ssh root@$IP"
+        echo "================================="
+        echo "To connect Tailscale after SSH:"
+        echo "1. ssh root@$IP"
+        echo "2. sudo tailscale up"
+        echo "3. Follow the login link"
+        echo "================================="
+        echo "This VPS will run for 6 hours"
+        
+    - name: Keep Alive
+      run: |
+        echo "VPS is running with Tailscale installed..."
+        while true; do
+          echo "[$(date)] VPS running... (Use 'sudo tailscale up' to connect)"
+          sleep 300
+        done
