@@ -1,65 +1,91 @@
-name: VPS with Tailscale
+name: VPS
 
 on:
   workflow_dispatch:
 
 jobs:
-  vps:
+  server-vps1:
     runs-on: ubuntu-latest
     timeout-minutes: 360
     
     steps:
-    - name: Install SSH Server
-      run: |
-        sudo apt update -y
-        sudo apt install -y openssh-server
-        sudo systemctl enable ssh
-        sudo systemctl start ssh
-        
-    - name: Set root password
-      run: |
-        echo "root:ubuntu123" | sudo chpasswd
-        sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
-        sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
-        sudo service ssh restart
-        
-    - name: Install and Setup Tailscale
-      run: |
-        curl -fsSL https://tailscale.com/install.sh | sh
-        echo 'net.ipv4.ip_forward = 1' | sudo tee -a /etc/sysctl.conf
-        echo 'net.ipv6.conf.all.forwarding = 1' | sudo tee -a /etc/sysctl.conf
-        sudo sysctl -p /etc/sysctl.conf
-        
-    - name: Get Tailscale Auth Key
-      run: |
-        echo "================================="
-        echo "🔑 IMPORTANT - Tailscale Setup"
-        echo "================================="
-        echo "1. Go to: https://login.tailscale.com/admin/settings/authkeys"
-        echo "2. Generate an auth key (ephemeral recommended)"
-        echo "3. Run this command in another terminal:"
-        echo ""
-        echo "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@${{ steps.ip.outputs.ip }} 'sudo tailscale up --authkey=YOUR_KEY'"
-        echo ""
-        echo "================================="
-        
-    - name: Show IP
-      id: ip
-      run: |
-        IP=$(curl -s ifconfig.me)
-        echo "ip=$IP" >> $GITHUB_OUTPUT
-        echo "================================="
-        echo "✅ VPS READY!"
-        echo "================================="
-        echo "IP Address: $IP"
-        echo "Username: root"
-        echo "Password: ubuntu123"
-        echo "================================="
-        
-    - name: Keep Alive in Background
-      run: |
-        # تشغيل خدمة SSH و Tailscale في الخلفية
-        while true; do
-          echo "[$(date)] VPS running on ${{ steps.ip.outputs.ip }}"
-          sleep 60
-        done
+      - name: Install & Configure SSH
+        run: |
+          sudo apt update -y
+          sudo apt install -y openssh-server
+          sudo systemctl enable ssh
+          sudo systemctl start ssh
+          echo "root:ubuntu123" | sudo chpasswd
+          echo "Password=123456" | sudo tee -a /etc/ssh/ssh_config
+          sudo service ssh restart
+          echo $SHELL | sudo -i
+          
+      - name: Install Tailscale
+        run: |
+          curl -fsSL https://tailscale.com/install.sh | sh
+          
+      - name: Login to Tailscale
+        run: |
+          echo "=========================================="
+          echo "🔐 LOGIN TO TAILSCALE"
+          echo "=========================================="
+          echo "Waiting for Tailscale login..."
+          echo ""
+          
+          # تشغيل tailscale up والحصول على رابط التسجيل
+          sudo tailscale up 2>&1 | tee /tmp/tailscale.log &
+          TAILSCALE_PID=$!
+          
+          # انتظار ظهور الرابط
+          sleep 5
+          LOGIN_URL=$(grep -oP 'https://login.tailscale.com/a/[a-zA-Z0-9]+' /tmp/tailscale.log || echo "")
+          
+          if [ -n "$LOGIN_URL" ]; then
+            echo ""
+            echo "=========================================="
+            echo "📱 OPEN THIS LINK IN YOUR BROWSER:"
+            echo "$LOGIN_URL"
+            echo "=========================================="
+            echo ""
+            echo "✅ After you login, Tailscale will connect automatically"
+            echo "⏳ Waiting for authentication (60 seconds)..."
+            echo ""
+            
+            # انتظار التسجيل (60 ثانية)
+            sleep 60
+            
+            # التحقق من نجاح الاتصال
+            if tailscale status &>/dev/null; then
+              echo "✅ Tailscale connected successfully!"
+              TAILSCALE_IP=$(tailscale ip)
+              echo "Tailscale IP: $TAILSCALE_IP"
+            else
+              echo "⚠️ Waiting for authentication... You can also login via SSH"
+            fi
+          else
+            echo "⚠️ No login URL detected. You can login manually via SSH:"
+            echo "   ssh root@$(curl -s ifconfig.me)"
+            echo "   sudo tailscale up"
+          fi
+          
+      - name: Verify SSH Access
+        run: |
+          IP=$(curl -s ifconfig.me)
+          echo "=========================================="
+          echo "✅ VPS READY!"
+          echo "=========================================="
+          echo "IP Address: $IP"
+          echo "Username: root"
+          echo "Password: ubuntu123"
+          if command -v tailscale &>/dev/null && tailscale status &>/dev/null; then
+            echo "Tailscale IP: $(tailscale ip)"
+            echo "Tailscale Status: Connected ✅"
+          fi
+          echo "=========================================="
+          
+      - name: Keep VPS Alive
+        run: |
+          while true; do
+            echo "[$(date)] VPS running..."
+            sleep 300
+          done
