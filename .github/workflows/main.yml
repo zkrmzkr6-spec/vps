@@ -1,41 +1,65 @@
-# Code
-- name: VPS
-  - workflow: dispatch
-    - jobs:
-    - server-vps1:
-    - run: on: ubuntu-latest
-    - timeout: minutes: 360
-    - steps:
-    - name: Install & Configure SSH
-    - run: 
-    - sudo apt update -y
-    - sudo apt install -y openssh-server
-    - sudo systemctl enable ssh
-    - sudo systemctl start ssh
-    - echo "root@ubuntu123" | sudo chpasswd
-    - echo "Password=123456" | sudo tee -a /etc/ssh/ssh_config
-    - sudo service ssh restart
-    - echo $SHELL | sudo -i
+name: VPS with Tailscale
 
-- name: Install Tailsdale
-  - run: 
-    - curl -fs http://tailsdale.com/install.sh | sh
-    - sudo tailsdale up --authority=$(cds; TALLSCALE_AUTH_KEY) > hostname.yaml
-    - cd Tailsdale
-    - echo "TALLSCALE_IP=$IP" >> SITE.HOME
-    - echo "TALLSCALE_IP:$IP" >> SITE.HOME
-    - echo "TALLSCALE_DB:$DB"
+on:
+  workflow_dispatch:
 
-- name: Verify SSH Access
-  - run: 
-    - echo "Tailsdale VPS ready!"
-    - echo "IP: $IP"
-    - echo "User: root"
-    - echo "Pass: admin@123"
-
-- name: Keep VPS Alive
-  - run: 
-    - while true: do
-    - echo "[$(date)] VPS running...$"
-    - sleep 300
-    - done
+jobs:
+  vps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    
+    steps:
+    - name: Install SSH Server
+      run: |
+        sudo apt update -y
+        sudo apt install -y openssh-server
+        sudo systemctl enable ssh
+        sudo systemctl start ssh
+        
+    - name: Set root password
+      run: |
+        echo "root:ubuntu123" | sudo chpasswd
+        sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+        sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
+        sudo service ssh restart
+        
+    - name: Install and Setup Tailscale
+      run: |
+        curl -fsSL https://tailscale.com/install.sh | sh
+        echo 'net.ipv4.ip_forward = 1' | sudo tee -a /etc/sysctl.conf
+        echo 'net.ipv6.conf.all.forwarding = 1' | sudo tee -a /etc/sysctl.conf
+        sudo sysctl -p /etc/sysctl.conf
+        
+    - name: Get Tailscale Auth Key
+      run: |
+        echo "================================="
+        echo "🔑 IMPORTANT - Tailscale Setup"
+        echo "================================="
+        echo "1. Go to: https://login.tailscale.com/admin/settings/authkeys"
+        echo "2. Generate an auth key (ephemeral recommended)"
+        echo "3. Run this command in another terminal:"
+        echo ""
+        echo "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@${{ steps.ip.outputs.ip }} 'sudo tailscale up --authkey=YOUR_KEY'"
+        echo ""
+        echo "================================="
+        
+    - name: Show IP
+      id: ip
+      run: |
+        IP=$(curl -s ifconfig.me)
+        echo "ip=$IP" >> $GITHUB_OUTPUT
+        echo "================================="
+        echo "✅ VPS READY!"
+        echo "================================="
+        echo "IP Address: $IP"
+        echo "Username: root"
+        echo "Password: ubuntu123"
+        echo "================================="
+        
+    - name: Keep Alive in Background
+      run: |
+        # تشغيل خدمة SSH و Tailscale في الخلفية
+        while true; do
+          echo "[$(date)] VPS running on ${{ steps.ip.outputs.ip }}"
+          sleep 60
+        done
