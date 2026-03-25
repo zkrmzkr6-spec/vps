@@ -24,51 +24,20 @@ jobs:
         run: |
           curl -fsSL https://tailscale.com/install.sh | sh
           
-      - name: Login to Tailscale
+      - name: Get Tailscale Auth Key
         run: |
           echo "=========================================="
-          echo "🔐 LOGIN TO TAILSCALE"
+          echo "🔑 IMPORTANT - Tailscale Setup"
           echo "=========================================="
-          echo "Waiting for Tailscale login..."
+          echo "1. Go to: https://login.tailscale.com/admin/settings/authkeys"
+          echo "2. Generate an auth key (ephemeral recommended)"
+          echo "3. Run this command in another terminal:"
           echo ""
+          echo "   ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@$(curl -s ifconfig.me) 'sudo tailscale up --authkey=YOUR_KEY'"
+          echo ""
+          echo "=========================================="
           
-          # تشغيل tailscale up والحصول على رابط التسجيل
-          sudo tailscale up 2>&1 | tee /tmp/tailscale.log &
-          TAILSCALE_PID=$!
-          
-          # انتظار ظهور الرابط
-          sleep 5
-          LOGIN_URL=$(grep -oP 'https://login.tailscale.com/a/[a-zA-Z0-9]+' /tmp/tailscale.log || echo "")
-          
-          if [ -n "$LOGIN_URL" ]; then
-            echo ""
-            echo "=========================================="
-            echo "📱 OPEN THIS LINK IN YOUR BROWSER:"
-            echo "$LOGIN_URL"
-            echo "=========================================="
-            echo ""
-            echo "✅ After you login, Tailscale will connect automatically"
-            echo "⏳ Waiting for authentication (60 seconds)..."
-            echo ""
-            
-            # انتظار التسجيل (60 ثانية)
-            sleep 60
-            
-            # التحقق من نجاح الاتصال
-            if tailscale status &>/dev/null; then
-              echo "✅ Tailscale connected successfully!"
-              TAILSCALE_IP=$(tailscale ip)
-              echo "Tailscale IP: $TAILSCALE_IP"
-            else
-              echo "⚠️ Waiting for authentication... You can also login via SSH"
-            fi
-          else
-            echo "⚠️ No login URL detected. You can login manually via SSH:"
-            echo "   ssh root@$(curl -s ifconfig.me)"
-            echo "   sudo tailscale up"
-          fi
-          
-      - name: Verify SSH Access
+      - name: Show IP
         run: |
           IP=$(curl -s ifconfig.me)
           echo "=========================================="
@@ -77,15 +46,11 @@ jobs:
           echo "IP Address: $IP"
           echo "Username: root"
           echo "Password: ubuntu123"
-          if command -v tailscale &>/dev/null && tailscale status &>/dev/null; then
-            echo "Tailscale IP: $(tailscale ip)"
-            echo "Tailscale Status: Connected ✅"
-          fi
           echo "=========================================="
           
-      - name: Keep VPS Alive
+      - name: Keep Alive in Background
         run: |
           while true; do
-            echo "[$(date)] VPS running..."
+            echo "[$(date)] VPS running on $(curl -s ifconfig.me)"
             sleep 300
           done
